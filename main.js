@@ -1,6 +1,9 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain } = require('electron');
 const path = require('path');
 const url = require('url');
+const fs = require('fs');
+const getFolderSize = require('get-folder-size');
+const chokidar = require('chokidar');
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -118,6 +121,21 @@ app.on('activate', () => {
 app.on('before-quit', () => { app.isQuitting = true });
 
 ipcMain.on('settings:saveRequested', (event, arg) => {
+    console.log('save requested');
     console.log(arg);
-    event.sender.send('settings:saved', arg);
-})
+
+    let folderPath = arg.folderPath;
+    getFolderSize(folderPath, (err, size) => {
+        if (err) throw err;
+        console.log(size);
+        event.sender.send('settings:saved', size);
+    })
+
+    chokidar.watch(folderPath, { ignored: /(^|[\/\\])\../ }).on('all', (fileEvent, path) => {
+        event.sender.send('settings:saved', {
+            event: fileEvent,
+            filepath: path
+        });
+    });
+
+});
