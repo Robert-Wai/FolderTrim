@@ -1,0 +1,14 @@
+{
+  "name": "foldertrim",
+  "version": "1.0.0",
+  "description": "Keeps folder at a specified size limit",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "Rowbear",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^1.8.4"
+  }
+}
