@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray } = require('electron');
+const { app, BrowserWindow, Menu, Tray, ipcMain } = require('electron');
 const path = require('path');
 const url = require('url');
 
@@ -115,4 +115,9 @@ app.on('activate', () => {
     }
 });
 
-app.on('before-quit', ()=> { app.isQuitting = true});
+app.on('before-quit', () => { app.isQuitting = true });
+
+ipcMain.on('settings:saveRequested', (event, arg) => {
+    console.log(arg);
+    event.sender.send('settings:saved', arg);
+})
