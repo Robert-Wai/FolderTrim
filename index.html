@@ -3,9 +3,8 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="description" content="">
-    <meta name="author" content="">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FolderTrim</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm"
         crossorigin="anonymous">
@@ -29,7 +28,7 @@
                         </div>
                     </div>
                     <div class="input-group mb-3">
-                        <input type="number" class="form-control" id="inputMaxFolderSize" placeholder="Maximum folder size">
+                        <input type="number" min="0" value="10" class="form-control" id="inputMaxFolderSize" placeholder="Maximum folder size">
                         <div class="input-group-append">
                             <span class="input-group-text">GB</span>
                         </div>
@@ -38,6 +37,9 @@
                 <button type="submit" class="btn btn-primary">Save</button>
             </form>
         </div>
+        <ul class="list-group" id="monitoredFoldersList">
+
+        </ul>
     </main>
     <footer class="footer">
         <div class="container">
@@ -51,21 +53,40 @@
     </footer>
 </body>
 <script> 
-    const { ipcRenderer } = require('electron')
+    const { ipcRenderer } = require('electron');
     const folderPathText = document.getElementById('folderLabel');
     const settingsForm = document.getElementById("settingsForm");
     const inputMaxFolderSize = document.getElementById("inputMaxFolderSize");
+    const monitoredFoldersList = document.getElementById("monitoredFoldersList");
 
-    ipcRenderer.on('settings:saved', (event, arg) => {
-        console.log("Settings Saved");
-        console.log(arg);
-    })
+    ipcRenderer
+        .on('settings:saved', (event, arg) => {
+            console.log("Settings Saved");
+            console.log(arg);
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            const sizeBadge = document.createElement('span');
+            sizeBadge.id = 'sizeBadge' + arg.folderIndex;
+            sizeBadge.className = 'badge badge-primary badge-pill';
+            const monitoredFolderText = document.createTextNode(arg.folder);
+            sizeBadge.textContent = arg.size + " / " + arg.maxSize + " GB";
+            li.appendChild(monitoredFolderText);
+            li.appendChild(sizeBadge);
+            monitoredFoldersList.appendChild(li);
+        })
+        .on('folder:sizeChanged', (event, arg) => {
+            console.log("folder:sizedChanged");
+            console.log(arg);
+            const badge = document.getElementById('sizeBadge' + arg.folderIndex);
+            badge.textContent = arg.size + " / " + arg.maxSize + " GB";
+        })
 
     function setFolderPath(e) {
         folderPathText.textContent = document.getElementById('inputGroupFile01').files[0].path;
     }
 
     function saveSettings(e) {
+        // prevent default action of submit button refreshing page
         e.preventDefault();
 
         ipcRenderer.send('settings:saveRequested', {

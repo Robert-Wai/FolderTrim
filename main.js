@@ -11,6 +11,7 @@ let mainWindow = null;
 let tray = null;
 let fsWatcher = null;
 const iconPath = path.join(__dirname, '/images/Folder_grey_16x.png');
+const foldersToMaxSize = {}
 
 function createMainWindow() {
     // Create the browser window.
@@ -37,8 +38,10 @@ function createMainWindow() {
         // Dereference the window object, usually you would store windows
         // in an array if your app supports multi windows, this is the time
         // when you should delete the corresponding element.
-        fsWatcher.close();
-        fsWatcher = null;
+        if (fsWatcher) {
+            fsWatcher.close();
+            fsWatcher = null;
+        }
         mainWindow = null;
     });
 
@@ -124,34 +127,91 @@ app.on('activate', () => {
 app.on('before-quit', () => { app.isQuitting = true });
 
 ipcMain.on('settings:saveRequested', (event, arg) => {
-    console.log('save requested');
+    console.log('save requested with arg: ');
     console.log(arg);
 
     let folderPath = arg.folderPath;
-    getFolderSize(folderPath, (err, size) => {
-        if (err) throw err;
-        console.log(size);
-        event.sender.send('settings:saved', size);
-    })
+    console.log(folderPath);
+    // initialize file watcher if we haven't
+    if (!fsWatcher) {
+        fsWatcher = chokidar.watch('file, dir, glob, or array', {
+            ignored: /(^|[\/\\])\../,
+        });
 
-    //chokidar.watch(folderPath, { ignored: /(^|[\/\\])\../ }).on('all', (fileEvent, path) => {
-    //    event.sender.send('settings:saved', {
-    //        event: fileEvent,
-    //        filepath: path
-    //    });
-    //});
-    fsWatcher = chokidar.watch('file, dir, glob, or array', {
-        ignored: /(^|[\/\\])\../,
-        ignoreInitial: true,
-    });
+        fsWatcher
+            .on('add', (filePath, stats) => {
+                let containingFolder = path.dirname(filePath);
+                let matchingKey = folderPath;
+                Object.keys(foldersToMaxSize).forEach((key) => {
+                    if (isChildOf(containingFolder, key)) {
+                        value = foldersToMaxSize[key];
+                        value[1] += stats.size;
+                        matchingKey = key;
+                    }
+                });
 
-    fsWatcher.on('add', (addArgs) => {
-        console.log(addArgs);
-        event.sender.send('settings:saved', addArgs);
-    });
+                event.sender.send('folder:sizeChanged', {
+                    folderIndex: Object.keys(foldersToMaxSize).indexOf(matchingKey),
+                    folder: matchingKey,
+                    size: toDisplayGB(foldersToMaxSize[matchingKey][1]),
+                    maxSize: toDisplayGB(foldersToMaxSize[matchingKey][0])
+                });
+            })
+            .on('unlink', filePath => {
+                console.log('Deleted: ' + filePath);
+                let containingFolder = path.dirname(filePath);
+                let matchingKey = folderPath;
+                Object.keys(foldersToMaxSize).forEach((key) => {
+                    if (isChildOf(containingFolder, key)) {
+                        matchingWatchedFolder = key;
+                    }
+                });
 
-    // report when ready
-    fsWatcher.on('ready', () => {
-        console.log("WATCHER READY");
-    });
+                console.log(matchingWatchedFolder);
+                getFolderSize(matchingWatchedFolder, (err, size) => {
+                    if (err) console.log(err);
+                    foldersToMaxSize[folderPath][1] = size;
+                    event.sender.send('folder:sizeChanged', {
+                        folderIndex: Object.keys(foldersToMaxSize).indexOf(matchingKey),
+                        folder: matchingKey,
+                        size: toDisplayGB(foldersToMaxSize[matchingKey][1]),
+                        maxSize: toDisplayGB(foldersToMaxSize[matchingKey][0])
+                    });
+                });
+            })
+            .on('error', error => {
+                console.log(error);
+            })
+            .on('ready', () => {
+                console.log('Monitoring for changes.');
+            });
+    }
+
+    if (Object.keys(fsWatcher.getWatched()).includes(folderPath)) {
+        console.log("Already monitoring " + folderPath);
+    }
+    else {
+        if (!Object.keys(foldersToMaxSize).includes(folderPath))
+            foldersToMaxSize[folderPath] = [arg.maxSize * 1024 * 1024 * 1024, 0];
+
+        fsWatcher.add(folderPath);
+        event.sender.send('settings:saved', {
+            folderIndex: Object.keys(foldersToMaxSize).indexOf(folderPath),
+            folder: folderPath,
+            size: toDisplayGB(foldersToMaxSize[folderPath][1]),
+            maxSize: toDisplayGB(foldersToMaxSize[folderPath][0])
+        });
+    }
+
 });
+
+function isChildOf(child, parent) {
+    if (child === parent) return true
+    const parentTokens = parent.split(path.sep).filter(i => i.length)
+    return parentTokens.every((t, i) => child.split(path.sep)[i] === t)
+}
+
+function toDisplayGB(bytes)
+{
+    return (bytes/1024/1024/1024).toFixed(2);
+}
