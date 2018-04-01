@@ -37,6 +37,8 @@ function createMainWindow() {
         // Dereference the window object, usually you would store windows
         // in an array if your app supports multi windows, this is the time
         // when you should delete the corresponding element.
+        fsWatcher.close();
+        fsWatcher = null;
         mainWindow = null;
     });
 
@@ -140,18 +142,16 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
     //});
     fsWatcher = chokidar.watch('file, dir, glob, or array', {
         ignored: /(^|[\/\\])\../,
-       // ignoreInitial: true,
-        cwd: folderPath
+        ignoreInitial: true,
+    });
+
+    fsWatcher.on('add', (addArgs) => {
+        console.log(addArgs);
+        event.sender.send('settings:saved', addArgs);
     });
 
     // report when ready
-    fsWatcher.on('ready', (readyArgs) => {
+    fsWatcher.on('ready', () => {
         console.log("WATCHER READY");
-        console.log(readyArgs);
-
-        event.sender.send('settings:saved', {
-            event: readyArgs,
-            filepath: 'path'
-        })
     });
 });
