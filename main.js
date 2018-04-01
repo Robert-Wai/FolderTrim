@@ -9,6 +9,7 @@ const chokidar = require('chokidar');
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow = null;
 let tray = null;
+let fsWatcher = null;
 const iconPath = path.join(__dirname, '/images/Folder_grey_16x.png');
 
 function createMainWindow() {
@@ -131,11 +132,26 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
         event.sender.send('settings:saved', size);
     })
 
-    chokidar.watch(folderPath, { ignored: /(^|[\/\\])\../ }).on('all', (fileEvent, path) => {
-        event.sender.send('settings:saved', {
-            event: fileEvent,
-            filepath: path
-        });
+    //chokidar.watch(folderPath, { ignored: /(^|[\/\\])\../ }).on('all', (fileEvent, path) => {
+    //    event.sender.send('settings:saved', {
+    //        event: fileEvent,
+    //        filepath: path
+    //    });
+    //});
+    fsWatcher = chokidar.watch('file, dir, glob, or array', {
+        ignored: /(^|[\/\\])\../,
+       // ignoreInitial: true,
+        cwd: folderPath
     });
 
+    // report when ready
+    fsWatcher.on('ready', (readyArgs) => {
+        console.log("WATCHER READY");
+        console.log(readyArgs);
+
+        event.sender.send('settings:saved', {
+            event: readyArgs,
+            filepath: 'path'
+        })
+    });
 });
