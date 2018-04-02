@@ -11,7 +11,7 @@ let mainWindow = null;
 let tray = null;
 let fsWatcher = null;
 const iconPath = path.join(__dirname, '/images/Folder_grey_16x.png');
-const foldersToMaxSize = {}
+const watchedFoldersInfo = {} // {{"C:\temp" : [maxSizeinBytes, currentSizeInBytes]}}
 
 function createMainWindow() {
     // Create the browser window.
@@ -142,26 +142,28 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
             .on('add', (filePath, stats) => {
                 let containingFolder = path.dirname(filePath);
                 let matchingKey = folderPath;
-                Object.keys(foldersToMaxSize).forEach((key) => {
+                Object.keys(watchedFoldersInfo).forEach((key) => {
                     if (isChildOf(containingFolder, key)) {
-                        value = foldersToMaxSize[key];
+                        value = watchedFoldersInfo[key];
                         value[1] += stats.size;
                         matchingKey = key;
                     }
                 });
 
+                if(watchedFoldersInfo[matchingKey])
+
                 event.sender.send('folder:sizeChanged', {
-                    folderIndex: Object.keys(foldersToMaxSize).indexOf(matchingKey),
+                    folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingKey),
                     folder: matchingKey,
-                    size: toDisplayGB(foldersToMaxSize[matchingKey][1]),
-                    maxSize: toDisplayGB(foldersToMaxSize[matchingKey][0])
+                    size: toDisplayGB(watchedFoldersInfo[matchingKey][1]),
+                    maxSize: toDisplayGB(watchedFoldersInfo[matchingKey][0])
                 });
             })
             .on('unlink', filePath => {
                 console.log('Deleted: ' + filePath);
                 let containingFolder = path.dirname(filePath);
                 let matchingKey = folderPath;
-                Object.keys(foldersToMaxSize).forEach((key) => {
+                Object.keys(watchedFoldersInfo).forEach((key) => {
                     if (isChildOf(containingFolder, key)) {
                         matchingWatchedFolder = key;
                     }
@@ -170,12 +172,12 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
                 console.log(matchingWatchedFolder);
                 getFolderSize(matchingWatchedFolder, (err, size) => {
                  //   if (err) console.log(err);
-                    foldersToMaxSize[folderPath][1] = size;
+                    watchedFoldersInfo[folderPath][1] = size;
                     event.sender.send('folder:sizeChanged', {
-                        folderIndex: Object.keys(foldersToMaxSize).indexOf(matchingKey),
+                        folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingKey),
                         folder: matchingKey,
-                        size: toDisplayGB(foldersToMaxSize[matchingKey][1]),
-                        maxSize: toDisplayGB(foldersToMaxSize[matchingKey][0])
+                        size: toDisplayGB(watchedFoldersInfo[matchingKey][1]),
+                        maxSize: toDisplayGB(watchedFoldersInfo[matchingKey][0])
                     });
                 });
             })
@@ -191,15 +193,15 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
         console.log("Already monitoring " + folderPath);
     }
     else {
-        if (!Object.keys(foldersToMaxSize).includes(folderPath))
-            foldersToMaxSize[folderPath] = [arg.maxSize * 1024 * 1024 * 1024, 0];
+        if (!Object.keys(watchedFoldersInfo).includes(folderPath))
+            watchedFoldersInfo[folderPath] = [arg.maxSize * 1024 * 1024 * 1024, 0];
 
         fsWatcher.add(folderPath);
         event.sender.send('settings:saved', {
-            folderIndex: Object.keys(foldersToMaxSize).indexOf(folderPath),
+            folderIndex: Object.keys(watchedFoldersInfo).indexOf(folderPath),
             folder: folderPath,
-            size: toDisplayGB(foldersToMaxSize[folderPath][1]),
-            maxSize: toDisplayGB(foldersToMaxSize[folderPath][0])
+            size: toDisplayGB(watchedFoldersInfo[folderPath][1]),
+            maxSize: toDisplayGB(watchedFoldersInfo[folderPath][0])
         });
     }
 
