@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, Tray, ipcMain } = require('electron');
 const path = require('path');
 const url = require('url');
 const fs = require('fs');
-const getFolderSize = require('get-folder-size');
+const getFolderSize = require('./getfoldersize');
 const chokidar = require('chokidar');
 
 // Keep a global reference of the window object, if you don't, the window will
@@ -169,7 +169,7 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
 
                 console.log(matchingWatchedFolder);
                 getFolderSize(matchingWatchedFolder, (err, size) => {
-                    if (err) console.log(err);
+                 //   if (err) console.log(err);
                     foldersToMaxSize[folderPath][1] = size;
                     event.sender.send('folder:sizeChanged', {
                         folderIndex: Object.keys(foldersToMaxSize).indexOf(matchingKey),
