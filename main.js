@@ -4,6 +4,7 @@ const url = require('url');
 const fs = require('fs');
 const getFolderSize = require('./getfoldersize');
 const chokidar = require('chokidar');
+const notifier = require('node-notifier');
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -12,14 +13,14 @@ let tray = null;
 let fsWatcher = null;
 const iconPath = path.join(__dirname, '/images/Folder_grey_16x.png');
 const watchedFoldersInfo = {} // {{"C:\temp" : [maxSizeinBytes, currentSizeInBytes]}}
-
+let lastGetFolderSizeTime = Date.now();
 function createMainWindow() {
     // Create the browser window.
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
         icon: iconPath,
-        darkTheme: true
+        darkTheme: true,
     });
 
     // and load the index.html of the app.
@@ -136,33 +137,82 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
     if (!fsWatcher) {
         fsWatcher = chokidar.watch('file, dir, glob, or array', {
             ignored: /(^|[\/\\])\../,
+            ignoreInitial: true,
         });
 
         fsWatcher
             .on('add', (filePath, stats) => {
+                console.log('Added: ' + filePath);
+
                 let containingFolder = path.dirname(filePath);
-                let matchingKey = folderPath;
+                let matchingWatchedFolder = folderPath;
+                //// calculate by keeping a running total. saves iterations but perhaps not as reliable?
+                //Object.keys(watchedFoldersInfo).forEach((key) => {
+                //    if (isChildOf(containingFolder, key)) {
+                //        watchedFoldersInfo[key][1] += stats.size;
+                //        matchingKey = key;
+                //        fileToDateAndSize[filePath] = [stats.birthtimeMs, stats.size];
+                //    }
+                //});
+
                 Object.keys(watchedFoldersInfo).forEach((key) => {
                     if (isChildOf(containingFolder, key)) {
-                        value = watchedFoldersInfo[key];
-                        value[1] += stats.size;
-                        matchingKey = key;
+                        matchingWatchedFolder = key;
                     }
                 });
 
-                if(watchedFoldersInfo[matchingKey])
+                console.log("Getting folder size of " + matchingWatchedFolder);
+                getFolderSize(matchingWatchedFolder, (err, size) => {
+                    console.log("size: " + size);
+                    lastGetFolderSizeTime = Date.now();
+                    watchedFoldersInfo[folderPath][1] = size;
 
-                event.sender.send('folder:sizeChanged', {
-                    folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingKey),
-                    folder: matchingKey,
-                    size: toDisplayGB(watchedFoldersInfo[matchingKey][1]),
-                    maxSize: toDisplayGB(watchedFoldersInfo[matchingKey][0])
+                    // update size
+                    event.sender.send('folder:sizeChanged', {
+                        folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingWatchedFolder),
+                        folder: matchingWatchedFolder,
+                        size: toDisplayGB(watchedFoldersInfo[matchingWatchedFolder][1]),
+                        maxSize: toDisplayGB(watchedFoldersInfo[matchingWatchedFolder][0])
+                    });
+                    
+                    // notify if we're over limit
+                    if (watchedFoldersInfo[matchingWatchedFolder][1] > watchedFoldersInfo[matchingWatchedFolder][0]) {
+                        var fileToDateAndSize = populateFileToDateToSize();
+
+                        let diskSpaceToClear = watchedFoldersInfo[matchingWatchedFolder][1] - watchedFoldersInfo[matchingWatchedFolder][0];
+                        let sortedFilesByDate = Object.keys(fileToDateAndSize).sort((a, b) => { return fileToDateAndSize[a][0] - fileToDateAndSize[b][0] });
+                        let totalFileSize = 0;
+
+                        // calculate number of files to delete. Check from oldest file to new. 
+                        let numFilesToDelete = 0;
+                        for (var i = 0; i < sortedFilesByDate.length; i++) {
+                            let filename = sortedFilesByDate[i];
+                            console.log(filename);
+                            totalFileSize += fileToDateAndSize[filename][1];
+                            numFilesToDelete++;
+                            if (totalFileSize >= diskSpaceToClear)
+                                break;
+                        }
+
+                        notifier.notify({
+                            title: 'FolderTrim',
+                            icon: iconPath,
+                            message: 'Deleting ' + numFilesToDelete + ' files to clear ' + toDisplayGB(totalFileSize) + ' GB'
+                        });
+                        event.sender.send('folder:deleteScheduled', {
+                            folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingWatchedFolder),
+                            filesToBeDeleted: sortedFilesByDate.slice(numFilesToDelete)
+                        });
+                    }
                 });
             })
+           // .on('change', (filePath, stats) =>{
+           //     console.log('changed: ' +filePath);
+           // })
             .on('unlink', filePath => {
                 console.log('Deleted: ' + filePath);
                 let containingFolder = path.dirname(filePath);
-                let matchingKey = folderPath;
+                let matchingWatchedFolder = folderPath;
                 Object.keys(watchedFoldersInfo).forEach((key) => {
                     if (isChildOf(containingFolder, key)) {
                         matchingWatchedFolder = key;
@@ -171,13 +221,14 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
 
                 console.log(matchingWatchedFolder);
                 getFolderSize(matchingWatchedFolder, (err, size) => {
-                 //   if (err) console.log(err);
+                    //   if (err) console.log(err);
+                    lastGetFolderSizeTime = Date.now();
                     watchedFoldersInfo[folderPath][1] = size;
                     event.sender.send('folder:sizeChanged', {
-                        folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingKey),
-                        folder: matchingKey,
-                        size: toDisplayGB(watchedFoldersInfo[matchingKey][1]),
-                        maxSize: toDisplayGB(watchedFoldersInfo[matchingKey][0])
+                        folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingWatchedFolder),
+                        folder: matchingWatchedFolder,
+                        size: toDisplayGB(watchedFoldersInfo[matchingWatchedFolder][1]),
+                        maxSize: toDisplayGB(watchedFoldersInfo[matchingWatchedFolder][0])
                     });
                 });
             })
@@ -197,11 +248,23 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
             watchedFoldersInfo[folderPath] = [arg.maxSize * 1024 * 1024 * 1024, 0];
 
         fsWatcher.add(folderPath);
+
         event.sender.send('settings:saved', {
             folderIndex: Object.keys(watchedFoldersInfo).indexOf(folderPath),
             folder: folderPath,
             size: toDisplayGB(watchedFoldersInfo[folderPath][1]),
             maxSize: toDisplayGB(watchedFoldersInfo[folderPath][0])
+        });
+
+        getFolderSize(folderPath, (err, size) => {
+            lastGetFolderSizeTime = Date.now();
+            watchedFoldersInfo[folderPath][1] = size;
+            event.sender.send('folder:sizeChanged', {
+                folderIndex: Object.keys(watchedFoldersInfo).indexOf(folderPath),
+                folder: folderPath,
+                size: toDisplayGB(watchedFoldersInfo[folderPath][1]),
+                maxSize: toDisplayGB(watchedFoldersInfo[folderPath][0])
+            });
         });
     }
 
@@ -213,7 +276,23 @@ function isChildOf(child, parent) {
     return parentTokens.every((t, i) => child.split(path.sep)[i] === t)
 }
 
-function toDisplayGB(bytes)
-{
-    return (bytes/1024/1024/1024).toFixed(2);
+function toDisplayGB(bytes) {
+    return (bytes / 1024 / 1024 / 1024).toFixed(2);
+}
+
+function populateFileToDateToSize() {
+    var watchedItems = fsWatcher.getWatched();
+    var returnFileToDateToSize = {};
+    for (var folder in watchedItems) {
+        var files = watchedItems[folder];
+        for (var i = 0; i < files.length; i++) {
+            let filePath = path.join(folder, files[i]);
+            var stats = fs.lstatSync(filePath);
+            if (stats.isFile()) {
+                returnFileToDateToSize[filePath] = [stats.birthtimeMs, stats.size];
+            }
+        }
+    }
+    console.log(returnFileToDateToSize);
+    return returnFileToDateToSize;
 }

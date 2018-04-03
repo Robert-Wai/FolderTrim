@@ -80,6 +80,11 @@
             const badge = document.getElementById('sizeBadge' + arg.folderIndex);
             badge.textContent = arg.size + " / " + arg.maxSize + " GB";
         })
+        .on('folder:deleteScheduled', (event, arg) =>{
+            console.log("folder:deletedScheduled");
+            const badge = document.getElementById('sizeBadge' + arg.folderIndex);
+            badge.className ='badge badge-danger badge-pill';
+        });
 
     function setFolderPath(e) {
         folderPathText.textContent = document.getElementById('inputGroupFile01').files[0].path;
