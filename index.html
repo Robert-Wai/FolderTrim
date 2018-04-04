@@ -79,11 +79,16 @@
             console.log(arg);
             const badge = document.getElementById('sizeBadge' + arg.folderIndex);
             badge.textContent = arg.size + " / " + arg.maxSize + " GB";
+            if (parseFloat(arg.size) > parseFloat(arg.maxSize)) {
+                badge.className = 'badge badge-danger badge-pill';
+            }
+            else {
+                badge.className = 'badge badge-primary badge-pill';
+            }
         })
-        .on('folder:deleteScheduled', (event, arg) =>{
+        .on('folder:deleteScheduled', (event, arg) => {
             console.log("folder:deletedScheduled");
-            const badge = document.getElementById('sizeBadge' + arg.folderIndex);
-            badge.className ='badge badge-danger badge-pill';
+
         });
 
     function setFolderPath(e) {

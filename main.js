@@ -13,7 +13,7 @@ let tray = null;
 let fsWatcher = null;
 const iconPath = path.join(__dirname, '/images/Folder_grey_16x.png');
 const watchedFoldersInfo = {} // {{"C:\temp" : [maxSizeinBytes, currentSizeInBytes]}}
-let lastGetFolderSizeTime = Date.now();
+
 function createMainWindow() {
     // Create the browser window.
     mainWindow = new BrowserWindow({
@@ -145,7 +145,7 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
                 console.log('Added: ' + filePath);
 
                 let containingFolder = path.dirname(filePath);
-                let matchingWatchedFolder = folderPath;
+                let matchingWatchedFolder = null;
                 //// calculate by keeping a running total. saves iterations but perhaps not as reliable?
                 //Object.keys(watchedFoldersInfo).forEach((key) => {
                 //    if (isChildOf(containingFolder, key)) {
@@ -163,18 +163,22 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
 
                 console.log("Getting folder size of " + matchingWatchedFolder);
                 getFolderSize(matchingWatchedFolder, (err, size) => {
+                    if(err) throw err;
                     console.log("size: " + size);
-                    lastGetFolderSizeTime = Date.now();
-                    watchedFoldersInfo[folderPath][1] = size;
-
+                    watchedFoldersInfo[matchingWatchedFolder][1] = size;
+                    console.log("watchedSize: " +watchedFoldersInfo[folderPath][1]);
+                    console.log(watchedFoldersInfo);
+                    console.log(matchingWatchedFolder);
+                    console.log(folderPath);
                     // update size
                     event.sender.send('folder:sizeChanged', {
                         folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingWatchedFolder),
                         folder: matchingWatchedFolder,
                         size: toDisplayGB(watchedFoldersInfo[matchingWatchedFolder][1]),
+                        watchedSize : size,
                         maxSize: toDisplayGB(watchedFoldersInfo[matchingWatchedFolder][0])
                     });
-                    
+
                     // notify if we're over limit
                     if (watchedFoldersInfo[matchingWatchedFolder][1] > watchedFoldersInfo[matchingWatchedFolder][0]) {
                         var fileToDateAndSize = populateFileToDateToSize();
@@ -187,7 +191,7 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
                         let numFilesToDelete = 0;
                         for (var i = 0; i < sortedFilesByDate.length; i++) {
                             let filename = sortedFilesByDate[i];
-                            console.log(filename);
+                       //     console.log(filename);
                             totalFileSize += fileToDateAndSize[filename][1];
                             numFilesToDelete++;
                             if (totalFileSize >= diskSpaceToClear)
@@ -199,20 +203,27 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
                             icon: iconPath,
                             message: 'Deleting ' + numFilesToDelete + ' files to clear ' + toDisplayGB(totalFileSize) + ' GB'
                         });
-                        event.sender.send('folder:deleteScheduled', {
-                            folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingWatchedFolder),
-                            filesToBeDeleted: sortedFilesByDate.slice(numFilesToDelete)
-                        });
+
+                        console.log(sortedFilesByDate.slice(numFilesToDelete));
+                        for (var i = 0; i < numFilesToDelete; i++) {
+                            fs.unlink(sortedFilesByDate[i], (err) => {
+                                if (err) console.log(err);
+                                console.log("Deleted " + sortedFilesByDate[i]);
+                                // add log to file
+                            })
+                        }
+
+                        //event.sender.send('folder:deleteScheduled', {
+                        //    folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingWatchedFolder),
+                        //    filesToBeDeleted: sortedFilesByDate.slice(numFilesToDelete)
+                        //});
                     }
                 });
             })
-           // .on('change', (filePath, stats) =>{
-           //     console.log('changed: ' +filePath);
-           // })
             .on('unlink', filePath => {
                 console.log('Deleted: ' + filePath);
                 let containingFolder = path.dirname(filePath);
-                let matchingWatchedFolder = folderPath;
+                let matchingWatchedFolder = null;
                 Object.keys(watchedFoldersInfo).forEach((key) => {
                     if (isChildOf(containingFolder, key)) {
                         matchingWatchedFolder = key;
@@ -222,8 +233,7 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
                 console.log(matchingWatchedFolder);
                 getFolderSize(matchingWatchedFolder, (err, size) => {
                     //   if (err) console.log(err);
-                    lastGetFolderSizeTime = Date.now();
-                    watchedFoldersInfo[folderPath][1] = size;
+                    watchedFoldersInfo[matchingWatchedFolder][1] = size;
                     event.sender.send('folder:sizeChanged', {
                         folderIndex: Object.keys(watchedFoldersInfo).indexOf(matchingWatchedFolder),
                         folder: matchingWatchedFolder,
@@ -257,7 +267,6 @@ ipcMain.on('settings:saveRequested', (event, arg) => {
         });
 
         getFolderSize(folderPath, (err, size) => {
-            lastGetFolderSizeTime = Date.now();
             watchedFoldersInfo[folderPath][1] = size;
             event.sender.send('folder:sizeChanged', {
                 folderIndex: Object.keys(watchedFoldersInfo).indexOf(folderPath),
@@ -281,6 +290,7 @@ function toDisplayGB(bytes) {
 }
 
 function populateFileToDateToSize() {
+    // can make this async if perf becomes an issue
     var watchedItems = fsWatcher.getWatched();
     var returnFileToDateToSize = {};
     for (var folder in watchedItems) {
