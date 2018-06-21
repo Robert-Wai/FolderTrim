@@ -11,14 +11,14 @@
     <link rel="stylesheet" href="css/sticky-footer.css">
 </head>
 
-<body>
+<body class='bg-light'>
     <header>
         <nav class='navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0'>
             <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="#">FolderTrim</a>
         </nav>
     </header>
-    <main role="main" class="container-fluid">
-        <div class="jumbotron">
+    <main role="main" class="container">
+        <div class="my-3 p-3 bg-white rounded box-shadow">
             <form id="settingsForm" onsubmit="saveSettings(event)">
                 <div class="form-group">
                     <div class="input-group mb-3">
@@ -65,11 +65,14 @@
             console.log(arg);
             const li = document.createElement('li');
             li.className = 'list-group-item d-flex justify-content-between align-items-center';
+
             const sizeBadge = document.createElement('span');
             sizeBadge.id = 'sizeBadge' + arg.folderIndex;
             sizeBadge.className = 'badge badge-primary badge-pill';
-            const monitoredFolderText = document.createTextNode(arg.folder);
             sizeBadge.textContent = arg.size + " / " + arg.maxSize + " GB";
+
+            const monitoredFolderText = document.createTextNode(arg.folder);
+
             li.appendChild(monitoredFolderText);
             li.appendChild(sizeBadge);
             monitoredFoldersList.appendChild(li);

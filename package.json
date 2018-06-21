@@ -9,11 +9,12 @@
   "author": "Rowbear",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^1.8.4"
+    "electron": "^1.8.7"
   },
   "dependencies": {
-    "async": "^2.6.0",
-    "chokidar": "^2.0.3",
-    "node-notifier": "^5.2.1"
+    "async": "^2.6.1",
+    "chokidar": "^2.0.4",
+    "node-notifier": "^5.2.1",
+    "npm": "^5.10.0"
   }
 }
